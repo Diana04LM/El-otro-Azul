@@ -945,6 +945,31 @@ footer em { color: var(--blue-lt); font-style: normal; }
       </div>
     </div>
 
+    <!-- Row 5: edad al publicar -->
+<div class="datos-grid single">
+  <div class="chart-card">
+    <h3>Edad de las autoras al momento de publicar en la <em>Revista Azul</em></h3>
+    <div id="chart-edad" style="overflow-x:auto;padding-bottom:1rem;"></div>
+  </div>
+</div>
+
+    <!-- Row 6: textos por tomo -->
+<div class="datos-grid single">
+  <div class="chart-card">
+    <h3>Distribución de textos por tomo de la <em>Revista Azul</em></h3>
+    <div class="bar-chart" id="chart-tomos"></div>
+  </div>
+</div>
+
+    <!-- Row 7: frecuencia por tomo -->
+<div class="datos-grid single">
+  <div class="chart-card">
+    <h3>Autoras según número de tomos distintos en que publicaron</h3>
+    <div class="bar-chart" id="chart-frecuencia"></div>
+  </div>
+</div>
+
+    
   </div>
 </section>
 
@@ -2931,6 +2956,135 @@ function drawDonut(svgId, legendId, data) {
 // ── INIT ──────────────────────────────────────────
 renderAuthors('home-grid');
 renderAuthors('autoras-grid');
+
+// ── VISUALIZACIONES ADICIONALES ───────────────────
+
+const BIRTH_YEARS = {
+  "carmen-sylva": 1843,
+  "emilia-pardo-bazan": 1851,
+  "esther-lucila-vazquez": 1860,
+  "juana-borrero": 1877,
+  "laura-mendez-de-cuenca": 1853,
+  "maria-enriqueta-camarillo": 1872,
+  "mercedes-matamoros": 1851,
+  "polita-de-lima": 1869
+};
+
+const TOMO_YEARS = { "I": 1894, "II": 1894, "III": 1895, "IV": 1895, "V": 1896 };
+
+function getTomoNum(ref) {
+  const m = ref.match(/Tomo\s+([IVX]+)/);
+  return m ? m[1] : null;
+}
+
+function buildExtraCharts() {
+
+  // ── Row 5: Edad al publicar ──
+  const edadData = [];
+  AUTHORS.forEach(a => {
+    const birthYear = BIRTH_YEARS[a.id];
+    a.textos.forEach(t => {
+      const tomo = getTomoNum(t.ref);
+      if (tomo && birthYear) {
+        const pubYear = TOMO_YEARS[tomo];
+        edadData.push({
+          autora: a.nombre.split(' ').slice(0,2).join(' '),
+          edad: pubYear - birthYear,
+          tipo: t.tipo,
+          titulo: t.titulo,
+          tomo: tomo
+        });
+      }
+    });
+  });
+
+  const autoras = [...new Set(edadData.map(d => d.autora))];
+  const svgW = Math.max(700, autoras.length * 120);
+  const svgH = 320;
+  const padL = 60, padR = 20, padT = 30, padB = 60;
+  const chartW = svgW - padL - padR;
+  const chartH = svgH - padT - padB;
+  const minEdad = Math.min(...edadData.map(d => d.edad));
+  const maxEdad = Math.max(...edadData.map(d => d.edad));
+  const edadMin = Math.floor(minEdad / 5) * 5;
+  const edadMax = maxEdad + 5;
+
+  let svgContent = `<svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:500px;">`;
+
+  svgContent += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+chartH}" stroke="var(--blue-lt)" stroke-width="1"/>`;
+  svgContent += `<line x1="${padL}" y1="${padT+chartH}" x2="${padL+chartW}" y2="${padT+chartH}" stroke="var(--blue-lt)" stroke-width="1"/>`;
+
+  for (let e = edadMin; e <= edadMax; e += 5) {
+    const y = padT + chartH - ((e - edadMin) / (edadMax - edadMin)) * chartH;
+    svgContent += `<text x="${padL-8}" y="${y+4}" font-size="11" text-anchor="end" fill="var(--muted)">${e}</text>`;
+    svgContent += `<line x1="${padL}" y1="${y}" x2="${padL+chartW}" y2="${y}" stroke="var(--cream-dk)" stroke-width="1" stroke-dasharray="4"/>`;
+  }
+  svgContent += `<text x="${padL-35}" y="${padT+chartH/2}" font-size="11" fill="var(--muted)" text-anchor="middle" transform="rotate(-90,${padL-35},${padT+chartH/2})">Edad</text>`;
+
+  autoras.forEach((autora, ai) => {
+    const x = padL + (ai + 0.5) * (chartW / autoras.length);
+    const textsForAutora = edadData.filter(d => d.autora === autora);
+    textsForAutora.forEach(d => {
+      const y = padT + chartH - ((d.edad - edadMin) / (edadMax - edadMin)) * chartH;
+      const color = d.tipo === 'narrativa' ? 'var(--blue)' : 'var(--gold)';
+      const jitter = (Math.random() - 0.5) * 18;
+      svgContent += `<circle cx="${x+jitter}" cy="${y}" r="7" fill="${color}" fill-opacity="0.82" stroke="white" stroke-width="1.5">
+        <title>${d.autora} · "${d.titulo}" · Tomo ${d.tomo} · Edad: ${d.edad}</title>
+      </circle>`;
+    });
+    const shortName = autora.split(' ')[0];
+    svgContent += `<text x="${x}" y="${padT+chartH+18}" font-size="10" text-anchor="middle" fill="var(--muted)" font-style="italic">${shortName}</text>`;
+  });
+
+  svgContent += `
+    <circle cx="${padL+chartW-100}" cy="${padT+10}" r="6" fill="var(--blue)" fill-opacity="0.82"/>
+    <text x="${padL+chartW-90}" y="${padT+14}" font-size="11" fill="var(--text)">Narrativa</text>
+    <circle cx="${padL+chartW-100}" cy="${padT+28}" r="6" fill="var(--gold)" fill-opacity="0.82"/>
+    <text x="${padL+chartW-90}" y="${padT+32}" font-size="11" fill="var(--text)">Lírica</text>`;
+
+  svgContent += `</svg>`;
+  document.getElementById('chart-edad').innerHTML = svgContent;
+
+  // ── Row 6: Textos por tomo ──
+  const tomoCount = { "I":0, "II":0, "III":0, "IV":0, "V":0 };
+  AUTHORS.forEach(a => a.textos.forEach(t => {
+    const tomo = getTomoNum(t.ref);
+    if (tomo) tomoCount[tomo]++;
+  }));
+  const maxTomo = Math.max(...Object.values(tomoCount));
+  const tomoContainer = document.getElementById('chart-tomos');
+  Object.entries(tomoCount).forEach(([tomo, count]) => {
+    const pct = Math.round((count / maxTomo) * 100);
+    const year = TOMO_YEARS[tomo];
+    tomoContainer.innerHTML += `
+      <div class="bar-row">
+        <div class="bar-lbl">Tomo ${tomo} (${year})</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <div class="bar-val">${count}</div>
+      </div>`;
+  });
+
+  // ── Row 7: Frecuencia por tomos distintos ──
+  const frecuenciaData = AUTHORS.map(a => {
+    const tomosDistintos = new Set(a.textos.map(t => getTomoNum(t.ref)).filter(Boolean));
+    return { name: a.nombre.split(' ').slice(0,2).join(' '), tomos: tomosDistintos.size };
+  }).sort((a,b) => b.tomos - a.tomos);
+  const maxFr = Math.max(...frecuenciaData.map(d => d.tomos));
+  const frContainer = document.getElementById('chart-frecuencia');
+  frecuenciaData.forEach(d => {
+    const pct = Math.round((d.tomos / maxFr) * 100);
+    frContainer.innerHTML += `
+      <div class="bar-row">
+        <div class="bar-lbl">${d.name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <div class="bar-val">${d.tomos} tomo${d.tomos > 1 ? 's' : ''}</div>
+      </div>`;
+  });
+}
+
+// Se engancha al buildCharts existente sin modificarlo
+const _origBuildCharts = buildCharts;
+buildCharts = function() { _origBuildCharts(); buildExtraCharts(); };
 </script>
 </body>
 </html>
